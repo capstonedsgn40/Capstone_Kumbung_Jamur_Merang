@@ -1,36 +1,21 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mushroom IoT Mist Control
 
-## Getting Started
+Dashboard Next.js untuk pemantauan DHT22 dan pengendalian mist nozzle ESP32 melalui Arduino Cloud.
 
-First, run the development server:
+## Setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Salin `.env.example` menjadi `.env.local`.
+2. Isi credential Arduino Cloud, Thing ID, PIN, dan secret sesi.
+3. Jalankan `npm install`, lalu `npm run dev`.
+4. Buat Thing Arduino Cloud dengan lima property: `suhu`, `kelembapan`, `pompaStatus`, `modeAuto`, dan `batasBawahRH`.
+5. Tempel firmware dari `firmware/kumbung_jamur_cloud.ino` ke Arduino Cloud Sketch dan isi SSID, password, device ID, serta device secret.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Perintah
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `npm run dev` — menjalankan dashboard lokal.
+- `npm run lint` — memeriksa kualitas TypeScript/React.
+- `npm run build` — membangun aplikasi untuk produksi.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Keamanan
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Credential Arduino Cloud hanya dibaca oleh route handler server. Dashboard dilindungi cookie sesi HTTP-only dan PIN. Perubahan property dibatasi oleh skema Zod pada endpoint `/api/iot`.
