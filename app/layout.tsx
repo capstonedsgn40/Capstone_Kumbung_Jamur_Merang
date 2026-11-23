@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mist Control — Kumbung Jamur",
-  description:
-    "Dashboard pemantauan dan kontrol mist nozzle berbasis Arduino Cloud",
+  title: "Monitoring Kumbung Jamur",
+  description: "Dashboard monitoring suhu, kelembapan, dan mist nozzle",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
