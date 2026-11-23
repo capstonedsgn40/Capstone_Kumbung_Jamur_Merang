@@ -102,9 +102,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     const status = error instanceof z.ZodError ? 400 : 500;
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Payload tidak valid" },
-      { status },
-    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" && error !== null && "message" in error
+          ? String((error as { message: unknown }).message)
+          : "Payload tidak valid";
+
+    console.error("[Webhook Error]", error);
+    return NextResponse.json({ error: message }, { status });
   }
 }
