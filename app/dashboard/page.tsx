@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
@@ -20,10 +20,12 @@ import {
   LogOut,
   Power,
   ShieldCheck,
+  SlidersHorizontal,
   Sprout,
   Thermometer,
   Wifi,
   WifiOff,
+  X,
 } from "lucide-react";
 
 type Sensor = {
@@ -78,6 +80,35 @@ export default function DashboardPage() {
   const [veg, setVeg] = useState(defaults.vegetatif);
   const [gen, setGen] = useState(defaults.generatif);
   const [confirmPump, setConfirmPump] = useState<boolean | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const toastTimerRef = useRef<number | null>(null);
+  const fallbackTimerRef = useRef<number | null>(null);
+  const toastRef = useRef("");
+  const channelRef = useRef<ReturnType<
+    NonNullable<typeof supabase>["channel"]
+  > | null>(null);
+
+  const clearFeedbackTimers = useCallback(() => {
+    if (toastTimerRef.current !== null)
+      window.clearTimeout(toastTimerRef.current);
+    if (fallbackTimerRef.current !== null)
+      window.clearTimeout(fallbackTimerRef.current);
+  }, []);
+
+  const showToast = useCallback(
+    (message: string, confirmed = false) => {
+      clearFeedbackTimers();
+      toastRef.current = message;
+      setToast(message);
+      if (confirmed) {
+        toastTimerRef.current = window.setTimeout(() => {
+          toastRef.current = "";
+          setToast("");
+        }, 2_000);
+      }
+    },
+    [clearFeedbackTimers],
+  );
 
   const loadStatus = useCallback(async () => {
     if (!supabase) return;
@@ -87,8 +118,8 @@ export default function DashboardPage() {
       .eq("id", 1)
       .maybeSingle();
     if (data) {
-      const next = data as Status;
-      setStatus(next);
+      setStatus(data as Status);
+      setNow(Date.now());
     }
   }, [supabase]);
 
@@ -107,22 +138,16 @@ export default function DashboardPage() {
     [router],
   );
 
-  useEffect(() => {
-    let timer: number;
-    const setup = async () => {
-      await loadStatus();
-      await loadHistory(range);
-      setNow(Date.now());
-      timer = window.setInterval(() => setNow(Date.now()), 1000);
-    };
-    void setup();
+  const subscribeRealtime = useCallback(() => {
+    if (!supabase) return;
+    if (channelRef.current) void supabase.removeChannel(channelRef.current);
 
     const channel = supabase
-      ?.channel("device-status-realtime")
+      .channel("device-status-realtime")
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "UPDATE",
           schema: "public",
           table: "device_status",
           filter: "id=eq.1",
@@ -132,27 +157,89 @@ export default function DashboardPage() {
           setStatus(next);
           setNow(Date.now());
           setConfirmPump(null);
+          if (
+            toastRef.current.includes("Menunggu konfirmasi ESP32") ||
+            toastRef.current.includes("Menunggu konfirmasi perangkat")
+          ) {
+            showToast("Konfirmasi diterima", true);
+          }
         },
       )
-      .subscribe();
+      .subscribe((channelStatus) => {
+        if (
+          channelStatus === "TIMED_OUT" ||
+          channelStatus === "CLOSED" ||
+          channelStatus === "CHANNEL_ERROR"
+        ) {
+          void loadStatus();
+        }
+      });
+
+    channelRef.current = channel;
+  }, [loadStatus, supabase, showToast]);
+
+  useEffect(() => {
+    let timer: number;
+    const setup = async () => {
+      await loadStatus();
+      await loadHistory(range);
+      setNow(Date.now());
+      subscribeRealtime();
+      timer = window.setInterval(() => setNow(Date.now()), 1000);
+    };
+    void setup();
+
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        setNow(Date.now());
+        void loadStatus();
+        void loadHistory(range);
+        const channelState = channelRef.current?.state;
+        if (
+          !channelState ||
+          channelState === "closed" ||
+          channelState === "errored"
+        ) {
+          subscribeRealtime();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", syncWhenVisible);
+    window.addEventListener("focus", syncWhenVisible);
 
     return () => {
       window.clearInterval(timer);
-      if (supabase && channel) void supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+      window.removeEventListener("focus", syncWhenVisible);
+      clearFeedbackTimers();
+      if (supabase && channelRef.current)
+        void supabase.removeChannel(channelRef.current);
     };
-  }, [loadHistory, loadStatus, range, supabase]);
+  }, [
+    loadHistory,
+    loadStatus,
+    range,
+    supabase,
+    subscribeRealtime,
+    clearFeedbackTimers,
+  ]);
 
   async function command(payload: object) {
     setBusy(true);
     setToast("");
+    clearFeedbackTimers();
     const response = await fetch("/api/mqtt/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     const result = await response.json();
-    if (!response.ok) setToast(result.error || "Perintah gagal dikirim");
-    else setToast("Perintah dikirim. Menunggu konfirmasi ESP32...");
+    if (!response.ok) showToast(result.error || "Perintah gagal dikirim");
+    else {
+      showToast("Perintah dikirim, menunggu konfirmasi ESP32...");
+      fallbackTimerRef.current = window.setTimeout(() => setToast(""), 8_000);
+    }
     setBusy(false);
   }
 
@@ -231,14 +318,14 @@ export default function DashboardPage() {
         {critical && (
           <div className="mb-4 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-[#e5484d]">
             <WifiOff size={18} />
-            CRITICAL_SENSOR_ERROR — Semua sensor gagal dibaca dan pompa dipaksa
+            CRITICAL_SENSOR_ERROR: Semua sensor gagal dibaca dan pompa dipaksa
             mati.
           </div>
         )}
         {!critical && !online && (
           <div className="mb-4 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-bold text-[#9ca3af]">
             <WifiOff size={18} />
-            Perangkat OFFLINE — tidak ada pembaruan dalam 15 detik terakhir.
+            Perangkat OFFLINE: tidak ada pembaruan dalam 15 detik terakhir.
           </div>
         )}
         {toast && (
@@ -247,113 +334,107 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
-          <article className="card-enter relative overflow-hidden rounded-[28px] border border-[#f6d5e1] bg-white p-5 shadow-[0_12px_38px_rgba(236,95,150,.10)] md:col-span-2 xl:col-span-5">
-            <div
-              className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-[#ffe4ee]/60 blur-2xl"
-              aria-hidden="true"
-            />
-            <div className="relative flex items-start justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a7580]">
-                  Kondisi Kumbung
-                </p>
-                <h2 className="mt-1 text-xl font-bold">
-                  {status?.phase === "GENERATIF"
-                    ? "Fase Generatif"
-                    : "Fase Vegetatif"}
-                </h2>
-              </div>
-              <span
-                className={`rounded-full px-3 py-1.5 text-xs font-bold ${status?.pump_status ? "bg-emerald-50 text-[#22a06b]" : "bg-slate-100 text-[#9ca3af]"}`}
-              >
-                Pompa {status?.pump_status ? "ON" : "OFF"}
-              </span>
-            </div>
-
-            <div className="relative mt-5 grid grid-cols-[150px_1fr] items-center gap-4 max-[420px]:grid-cols-1">
-              <div
-                className="relative mx-auto aspect-square w-[150px] max-w-full rounded-full p-3"
-                style={{
-                  background: `conic-gradient(#ec5f96 ${Math.min(Math.max(status?.avg_rh ?? 0, 0), 100) * 3.6}deg, #ffe4ee 0deg)`,
-                }}
-              >
-                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white shadow-inner">
-                  <Droplets className="mb-1 text-[#ec5f96]" size={20} />
-                  <b className="text-3xl tabular-nums">
-                    {status?.avg_rh == null
-                      ? "—"
-                      : `${status.avg_rh.toFixed(1)}%`}
-                  </b>
-                  <span className="text-xs text-[#8a7580]">RH Rata-rata</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 max-[420px]:grid-cols-2">
-                <div className="rounded-2xl bg-[#fff9fb] p-3">
-                  <Thermometer className="text-[#ec5f96]" size={18} />
-                  <p className="mt-2 text-[11px] text-[#8a7580]">
-                    Suhu rata-rata
-                  </p>
-                  <p className="mt-1 text-xl font-bold tabular-nums">
-                    {status?.avg_temp == null
-                      ? "—"
-                      : `${status.avg_temp.toFixed(1)}°C`}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-[#fff9fb] p-3">
-                  <Gauge className="text-[#ec5f96]" size={18} />
-                  <p className="mt-2 text-[11px] text-[#8a7580]">Rentang RH</p>
-                  <p className="mt-1 text-sm font-bold tabular-nums">
-                    {status?.active_lower_rh ?? "—"}%–
-                    {status?.active_upper_rh ?? "—"}%
-                  </p>
-                </div>
-              </div>
-            </div>
-            {status?.pump_status && (
-              <div
-                className="mist-drops absolute bottom-3 right-4 flex gap-1 text-[#ec5f96]"
-                aria-hidden="true"
-              >
-                <span className="h-2 w-2 rounded-full bg-[#ec5f96]/30" />
-                <span className="h-2 w-2 rounded-full bg-[#ec5f96]/50" />
-                <span className="h-2 w-2 rounded-full bg-[#ec5f96]/70" />
-              </div>
-            )}
-          </article>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:col-span-2 xl:col-span-7">
-            <Kpi
-              icon={<Thermometer size={20} />}
-              label="Rata-rata Suhu"
-              value={
-                status?.avg_temp == null
-                  ? "—"
-                  : `${status.avg_temp.toFixed(1)}°C`
+        <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-[#f6d5e1] bg-white p-2 shadow-[0_8px_24px_rgba(236,95,150,.06)] sm:grid-cols-3 lg:grid-cols-[1fr_1fr_1fr_auto_auto]">
+          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-[#fff9fb] px-3 py-2">
+            <Power
+              size={16}
+              className={
+                status?.pump_status ? "text-[#22a06b]" : "text-[#9ca3af]"
               }
-              tone="pink"
             />
-            <Kpi
-              icon={<Droplets size={20} />}
-              label="Rata-rata Kelembapan"
-              value={
-                status?.avg_rh == null ? "—" : `${status.avg_rh.toFixed(1)}%`
-              }
-              tone="pink"
-            />
-            <Kpi
-              icon={<Power size={20} />}
-              label="Status Pompa"
-              value={status?.pump_status ? "ON" : "OFF"}
-              tone={status?.pump_status ? "green" : "gray"}
-            />
-            <Kpi
-              icon={<Cloud size={20} />}
-              label="Sensor Aktif"
-              value={`${status?.active_count ?? 0} / 6`}
-              tone="pink"
-            />
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold uppercase text-[#8a7580]">
+                Pompa
+              </p>
+              <p className="text-sm font-bold">
+                {status?.pump_status ? "ON" : "OFF"}
+              </p>
+            </div>
           </div>
+          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-[#fff9fb] px-3 py-2">
+            <Cloud size={16} className="text-[#0284c7]" />
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold uppercase text-[#8a7580]">
+                Sensor Aktif
+              </p>
+              <p className="text-sm font-bold">
+                {status?.active_count ?? 0} / 6
+              </p>
+            </div>
+          </div>
+          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-[#fff9fb] px-3 py-2">
+            <Sprout size={16} className="text-[#ec5f96]" />
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold uppercase text-[#8a7580]">
+                Fase Aktif
+              </p>
+              <p className="truncate text-sm font-bold">
+                {status?.phase === "GENERATIF" ? "GENERATIF" : "VEGETATIF"}
+              </p>
+            </div>
+          </div>
+          <button
+            disabled={!online || busy}
+            onClick={() =>
+              command({
+                type: "CONTROL",
+                modeAuto: !status?.mode_auto,
+                pompa: status?.mode_auto ? false : status?.pump_status,
+              })
+            }
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#f6d5e1] px-3 text-xs font-bold transition hover:border-[#ec5f96] hover:bg-[#ffe4ee] active:scale-95 disabled:opacity-50"
+            aria-label="Ubah mode operasi"
+          >
+            {status?.mode_auto ? "AUTO" : "MANUAL"}
+            <span
+              className={`relative h-6 w-11 rounded-full ${status?.mode_auto ? "bg-[#ec5f96]" : "bg-[#d7cdd1]"}`}
+            >
+              <span
+                className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition ${status?.mode_auto ? "left-6" : "left-1"}`}
+              />
+            </span>
+          </button>
+          <button
+            disabled={!manualEnabled || busy}
+            onClick={() => pumpAction(!status?.pump_status)}
+            className="min-h-11 rounded-xl bg-[#ec5f96] px-3 text-xs font-bold text-white shadow-[0_6px_14px_rgba(236,95,150,.14)] transition hover:bg-[#db4f87] active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+          >
+            {status?.pump_status ? "Matikan Pompa" : "Nyalakan Pompa"}
+          </button>
+        </div>
+
+        <div className="mb-5 flex justify-end">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            disabled={!online || busy}
+            className="flex min-h-11 items-center gap-2 rounded-xl border border-[#f6d5e1] bg-white px-4 text-sm font-bold shadow-[0_6px_18px_rgba(236,95,150,.08)] transition hover:border-[#ec5f96] hover:text-[#ec5f96] active:scale-95 disabled:opacity-50"
+          >
+            <SlidersHorizontal size={17} />
+            Atur Batas RH
+          </button>
+        </div>
+
+        <div className="mb-5 grid gap-4 sm:grid-cols-2">
+          <Kpi
+            icon={<Thermometer size={22} />}
+            label="Rata-rata Suhu"
+            value={
+              status?.avg_temp != null
+                ? `${status.avg_temp.toFixed(1)} °C`
+                : "Belum ada data"
+            }
+            tone="orange"
+          />
+          <Kpi
+            icon={<Droplets size={22} />}
+            label="Rata-rata Kelembapan (RH)"
+            value={
+              status?.avg_rh != null
+                ? `${status.avg_rh.toFixed(1)} %`
+                : "Belum ada data"
+            }
+            tone="blue"
+          />
         </div>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr]">
@@ -368,14 +449,14 @@ export default function DashboardPage() {
                 <button
                   disabled={!online || busy}
                   onClick={() => command({ type: "CONFIG", fase: "VEGETATIF" })}
-                  className={`min-h-11 rounded-xl text-sm font-bold transition ${status?.phase === "VEGETATIF" ? "bg-[#ec5f96] text-white shadow-[0_6px_16px_rgba(236,95,150,.16)]" : "text-[#8a7580]"}`}
+                  className={`min-h-11 rounded-xl text-sm font-bold transition active:scale-95 ${status?.phase === "VEGETATIF" ? "bg-[#ec5f96] text-white" : "text-[#8a7580]"}`}
                 >
                   Vegetatif
                 </button>
                 <button
                   disabled={!online || busy}
                   onClick={() => command({ type: "CONFIG", fase: "GENERATIF" })}
-                  className={`min-h-11 rounded-xl text-sm font-bold transition ${status?.phase === "GENERATIF" ? "bg-[#ec5f96] text-white shadow-[0_6px_16px_rgba(236,95,150,.16)]" : "text-[#8a7580]"}`}
+                  className={`min-h-11 rounded-xl text-sm font-bold transition active:scale-95 ${status?.phase === "GENERATIF" ? "bg-[#ec5f96] text-white" : "text-[#8a7580]"}`}
                 >
                   Generatif
                 </button>
@@ -398,7 +479,7 @@ export default function DashboardPage() {
                   })
                 }
                 aria-label="Ubah mode operasi"
-                className={`relative h-9 w-16 rounded-full transition ${status?.mode_auto ? "bg-[#ec5f96]" : "bg-[#d7cdd1]"} disabled:opacity-50`}
+                className={`relative h-9 w-16 rounded-full transition active:scale-95 ${status?.mode_auto ? "bg-[#ec5f96]" : "bg-[#d7cdd1]"}`}
               >
                 <span
                   className={`absolute top-1 h-7 w-7 rounded-full bg-white shadow transition ${status?.mode_auto ? "left-8" : "left-1"}`}
@@ -406,54 +487,11 @@ export default function DashboardPage() {
               </button>
             </div>
           </article>
-
-          <article className="card-enter rounded-[24px] border border-[#f6d5e1] bg-white p-5 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
-            <div className="flex items-center gap-2">
-              <ShieldCheck size={19} className="text-[#ec5f96]" />
-              <h2 className="font-bold">Kontrol Pompa Manual</h2>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="mt-5 flex justify-center">
-                <button
-                  disabled={!manualEnabled || busy}
-                  onClick={() => pumpAction(!status?.pump_status)}
-                  className={`flex h-28 w-28 items-center justify-center rounded-full text-sm font-extrabold tracking-wide text-white transition-all duration-150 active:translate-y-1 active:scale-[.97] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-[0_7px_0_#cbd5e1] ${status?.pump_status ? "bg-[#e5484d] shadow-[0_9px_0_#b92f35,0_14px_22px_rgba(229,72,77,.24)] hover:bg-[#ef5a60]" : "bg-[#22a06b] shadow-[0_9px_0_#16784e,0_14px_22px_rgba(34,160,107,.24)] hover:bg-[#2caf76]"}`}
-                  aria-label={
-                    status?.pump_status ? "Matikan pompa" : "Nyalakan pompa"
-                  }
-                >
-                  {status?.pump_status ? "MATIKAN" : "NYALAKAN"}
-                </button>
-              </div>
-            </div>
-            {confirmPump !== null && (
-              <p className="mt-3 text-sm font-semibold text-[#ec5f96]">
-                Menunggu konfirmasi perangkat...
-              </p>
-            )}
-            {!status?.mode_auto && !online && (
-              <p className="mt-3 text-xs text-[#8a7580]">
-                Kontrol dinonaktifkan karena perangkat offline.
-              </p>
-            )}
-          </article>
         </div>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          <ThresholdForm title="Vegetatif" value={veg} onChange={setVeg} />
-          <ThresholdForm title="Generatif" value={gen} onChange={setGen} />
-        </div>
-        <button
-          disabled={!online || busy}
-          onClick={saveConfig}
-          className="mt-4 min-h-12 w-full rounded-2xl bg-[#ec5f96] px-8 py-3 font-bold text-white shadow-[0_10px_24px_rgba(236,95,150,.16)] transition active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
-        >
-          Simpan Pengaturan RH
-        </button>
-
-        <article className="mt-5 rounded-[24px] border border-[#f6d5e1] bg-white p-5 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
+        <div className="mt-5 rounded-[24px] border border-[#f6d5e1] bg-white p-5 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-bold">Sensor DHT22 — 6 Titik Rak</h2>
+            <h2 className="font-bold">Sensor DHT22: 6 Titik Rak</h2>
             <span className="text-xs font-bold text-[#8a7580]">
               {status?.active_count ?? 0}/6 aktif
             </span>
@@ -473,9 +511,9 @@ export default function DashboardPage() {
               <SensorCard key={sensor.id} sensor={sensor} />
             ))}
           </div>
-        </article>
+        </div>
 
-        <article className="mt-5 rounded-[24px] border border-[#f6d5e1] bg-white p-5 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
+        <div className="mt-5 rounded-[24px] border border-[#f6d5e1] bg-white p-5 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#8a7580]">
@@ -505,12 +543,12 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mb-3 flex flex-wrap gap-4 text-xs font-bold">
-            <span className="flex items-center gap-2 text-[#ec5f96]">
-              <i className="h-2.5 w-2.5 rounded-full bg-[#ec5f96]" />
+            <span className="flex items-center gap-2 text-[#ea580c]">
+              <i className="h-2.5 w-2.5 rounded-full bg-[#ea580c]" />
               Suhu °C
             </span>
-            <span className="flex items-center gap-2 text-[#d67ba1]">
-              <i className="h-2.5 w-2.5 rounded-full bg-[#d67ba1]" />
+            <span className="flex items-center gap-2 text-[#0284c7]">
+              <i className="h-2.5 w-2.5 rounded-full bg-[#0284c7]" />
               RH %
             </span>
           </div>
@@ -519,12 +557,12 @@ export default function DashboardPage() {
               <AreaChart data={history}>
                 <defs>
                   <linearGradient id="temp" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ec5f96" stopOpacity={0.32} />
-                    <stop offset="95%" stopColor="#ec5f96" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#ea580c" stopOpacity={0.32} />
+                    <stop offset="95%" stopColor="#ea580c" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="rh" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#d67ba1" stopOpacity={0.24} />
-                    <stop offset="95%" stopColor="#d67ba1" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#0284c7" stopOpacity={0.24} />
+                    <stop offset="95%" stopColor="#0284c7" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f6d5e1" />
@@ -553,7 +591,7 @@ export default function DashboardPage() {
                   type="monotone"
                   dataKey="avg_temp"
                   name="Suhu °C"
-                  stroke="#ec5f96"
+                  stroke="#ea580c"
                   strokeWidth={2.5}
                   fill="url(#temp)"
                 />
@@ -561,14 +599,14 @@ export default function DashboardPage() {
                   type="monotone"
                   dataKey="avg_rh"
                   name="RH %"
-                  stroke="#d67ba1"
+                  stroke="#0284c7"
                   strokeWidth={2.5}
                   fill="url(#rh)"
                 />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </article>
+        </div>
 
         <p className="mt-5 text-center text-xs text-[#8a7580]">
           Pembaruan terakhir:{" "}
@@ -577,6 +615,35 @@ export default function DashboardPage() {
             : "Belum ada data"}
         </p>
       </section>
+
+      {settingsOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center overflow-y-auto bg-black/30">
+          <div className="modal-enter w-full max-w-[600px] rounded-2xl border border-[#f6d5e1] bg-white p-6 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold">Pengaturan Batas Kelembapan</h2>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="rounded-full p-2 text-[#8a7580] transition hover:bg-[#f6d5e1]"
+                aria-label="Tutup"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              <ThresholdForm title="Vegetatif" value={veg} onChange={setVeg} />
+              <ThresholdForm title="Generatif" value={gen} onChange={setGen} />
+            </div>
+            <button
+              disabled={!online || busy}
+              onClick={saveConfig}
+              className="mt-4 w-full rounded-2xl bg-[#ec5f96] px-8 py-3 font-bold text-white shadow-[0_10px_24px_rgba(236,95,150,.16)] transition active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Simpan Pengaturan RH
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -596,6 +663,8 @@ function Kpi({
     pink: "bg-[#ffe4ee] text-[#ec5f96]",
     green: "bg-emerald-50 text-[#22a06b]",
     gray: "bg-slate-100 text-[#9ca3af]",
+    orange: "bg-orange-50 text-[#ea580c]",
+    blue: "bg-sky-50 text-[#0284c7]",
   };
   return (
     <article className="card-enter rounded-3xl border border-[#f6d5e1] bg-white p-5 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
@@ -667,7 +736,7 @@ function SensorCard({ sensor }: { sensor: Sensor }) {
             {sensor.id <= 3 ? "Rak Kiri" : "Rak Kanan"}
           </p>
           <h3 className="mt-0.5 font-bold">
-            Titik {sensor.id} —{" "}
+            Titik {sensor.id}:{" "}
             {["Atas", "Tengah", "Bawah"][(sensor.id - 1) % 3]}
           </h3>
         </div>
@@ -685,14 +754,18 @@ function SensorCard({ sensor }: { sensor: Sensor }) {
           <span className="text-xs text-[#8a7580]">Suhu</span>
           <br />
           <b className="tabular-nums">
-            {sensor.ok && sensor.t != null ? `${sensor.t.toFixed(1)} °C` : "—"}
+            {sensor.ok && sensor.t != null
+              ? `${sensor.t.toFixed(1)} °C`
+              : "Belum ada data"}
           </b>
         </p>
         <p className="rounded-xl bg-white/80 p-2.5">
           <span className="text-xs text-[#8a7580]">RH</span>
           <br />
           <b className="tabular-nums">
-            {sensor.ok && sensor.h != null ? `${sensor.h.toFixed(1)} %` : "—"}
+            {sensor.ok && sensor.h != null
+              ? `${sensor.h.toFixed(1)} %`
+              : "Belum ada data"}
           </b>
         </p>
       </div>
