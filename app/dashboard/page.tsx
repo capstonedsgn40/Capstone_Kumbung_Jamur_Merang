@@ -304,6 +304,21 @@ export default function DashboardPage() {
               {critical ? "SENSOR ERROR" : online ? "LIVE" : "OFFLINE"}
             </div>
             <button
+              onClick={() => {
+                if (status?.config) {
+                  setVeg(status.config.vegetatif);
+                  setGen(status.config.generatif);
+                }
+                setSettingsOpen(true);
+              }}
+              disabled={!online || busy}
+              className="flex h-11 items-center gap-2 rounded-xl border border-[#f6d5e1] px-3 text-xs font-bold text-[#8a7580] transition hover:border-[#ec5f96] hover:bg-[#ffe4ee] hover:text-[#ec5f96] active:scale-95 disabled:opacity-50"
+              aria-label="Atur Batas RH"
+            >
+              <SlidersHorizontal size={16} />
+              <span className="hidden sm:inline">Atur Batas RH</span>
+            </button>
+            <button
               onClick={logout}
               className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#f6d5e1] text-[#8a7580] transition hover:border-[#ec5f96] hover:bg-[#ffe4ee] hover:text-[#ec5f96]"
               aria-label="Logout"
@@ -328,11 +343,7 @@ export default function DashboardPage() {
             Perangkat OFFLINE: tidak ada pembaruan dalam 15 detik terakhir.
           </div>
         )}
-        {toast && (
-          <div className="mb-4 rounded-2xl border border-[#f6d5e1] bg-white px-4 py-3 text-sm text-[#3b2a33] shadow-[0_8px_24px_rgba(236,95,150,.08)]">
-            {toast}
-          </div>
-        )}
+
 
         <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-[#f6d5e1] bg-white p-2 shadow-[0_8px_24px_rgba(236,95,150,.06)] sm:grid-cols-3 lg:grid-cols-[1fr_1fr_1fr_auto_auto]">
           <div className="flex min-w-0 items-center gap-2 rounded-xl bg-[#fff9fb] px-3 py-2">
@@ -399,49 +410,50 @@ export default function DashboardPage() {
             onClick={() => pumpAction(!status?.pump_status)}
             className="min-h-11 rounded-xl bg-[#ec5f96] px-3 text-xs font-bold text-white shadow-[0_6px_14px_rgba(236,95,150,.14)] transition hover:bg-[#db4f87] active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
           >
-            {status?.pump_status ? "Matikan Pompa" : "Nyalakan Pompa"}
-          </button>
-        </div>
-
-        <div className="mb-5 flex justify-end">
-          <button
-            onClick={() => setSettingsOpen(true)}
-            disabled={!online || busy}
-            className="flex min-h-11 items-center gap-2 rounded-xl border border-[#f6d5e1] bg-white px-4 text-sm font-bold shadow-[0_6px_18px_rgba(236,95,150,.08)] transition hover:border-[#ec5f96] hover:text-[#ec5f96] active:scale-95 disabled:opacity-50"
-          >
-            <SlidersHorizontal size={17} />
-            Atur Batas RH
+            {confirmPump !== null
+              ? "Menunggu..."
+              : status?.pump_status
+                ? "Matikan Pompa"
+                : "Nyalakan Pompa"}
           </button>
         </div>
 
         <div className="mb-5 grid gap-4 sm:grid-cols-2">
-          <Kpi
-            icon={<Thermometer size={22} />}
-            label="Rata-rata Suhu"
-            value={
-              status?.avg_temp != null
-                ? `${status.avg_temp.toFixed(1)} °C`
-                : "Belum ada data"
-            }
-            tone="orange"
-          />
-          <Kpi
-            icon={<Droplets size={22} />}
-            label="Rata-rata Kelembapan (RH)"
-            value={
-              status?.avg_rh != null
-                ? `${status.avg_rh.toFixed(1)} %`
-                : "Belum ada data"
-            }
-            tone="blue"
-          />
+          {status === null ? (
+            <div className="skeleton h-28 rounded-3xl" />
+          ) : (
+            <Kpi
+              icon={<Thermometer size={22} />}
+              label="Rata-rata Suhu"
+              value={
+                status.avg_temp != null
+                  ? `${status.avg_temp.toFixed(1)} \u00b0C`
+                  : "Belum ada data"
+              }
+              tone="orange"
+            />
+          )}
+          {status === null ? (
+            <div className="skeleton h-28 rounded-3xl" />
+          ) : (
+            <Kpi
+              icon={<Droplets size={22} />}
+              label="Rata-rata Kelembapan (RH)"
+              value={
+                status.avg_rh != null
+                  ? `${status.avg_rh.toFixed(1)} %`
+                  : "Belum ada data"
+              }
+              tone="blue"
+            />
+          )}
         </div>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr]">
+        <div className="mt-5">
           <article className="card-enter rounded-[24px] border border-[#f6d5e1] bg-white p-5 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
             <div className="flex items-center gap-2">
               <Sprout size={19} className="text-[#ec5f96]" />
-              <h2 className="font-bold">Fase & Mode</h2>
+              <h2 className="font-bold">Fase Pertumbuhan</h2>
             </div>
             <div className="mt-4">
               <p className="mb-2 text-sm text-[#8a7580]">Fase Aktif</p>
@@ -462,29 +474,25 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-            <div className="mt-5 flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[#8a7580]">Mode Operasi</p>
-                <p className="mt-1 font-bold">
-                  {status?.mode_auto ? "AUTO" : "MANUAL"}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className={`rounded-2xl border p-3 ${status?.phase === "VEGETATIF" ? "border-[#f6d5e1] bg-[#fff9fb]" : "border-transparent bg-[#f8fafc]"}`}>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#8a7580]">Vegetatif</p>
+                <p className="text-sm font-bold text-[#0284c7]">
+                  {status?.config?.vegetatif
+                    ? `${status.config.vegetatif.bawah}% – ${status.config.vegetatif.atas}%`
+                    : "Belum ada data"}
                 </p>
+                <p className="mt-0.5 text-[10px] text-[#8a7580]">Batas RH</p>
               </div>
-              <button
-                disabled={!online || busy}
-                onClick={() =>
-                  command({
-                    type: "CONTROL",
-                    modeAuto: !status?.mode_auto,
-                    pompa: status?.mode_auto ? false : status?.pump_status,
-                  })
-                }
-                aria-label="Ubah mode operasi"
-                className={`relative h-9 w-16 rounded-full transition active:scale-95 ${status?.mode_auto ? "bg-[#ec5f96]" : "bg-[#d7cdd1]"}`}
-              >
-                <span
-                  className={`absolute top-1 h-7 w-7 rounded-full bg-white shadow transition ${status?.mode_auto ? "left-8" : "left-1"}`}
-                />
-              </button>
+              <div className={`rounded-2xl border p-3 ${status?.phase === "GENERATIF" ? "border-[#f6d5e1] bg-[#fff9fb]" : "border-transparent bg-[#f8fafc]"}`}>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#8a7580]">Generatif</p>
+                <p className="text-sm font-bold text-[#0284c7]">
+                  {status?.config?.generatif
+                    ? `${status.config.generatif.bawah}% – ${status.config.generatif.atas}%`
+                    : "Belum ada data"}
+                </p>
+                <p className="mt-0.5 text-[10px] text-[#8a7580]">Batas RH</p>
+              </div>
             </div>
           </article>
         </div>
@@ -611,14 +619,20 @@ export default function DashboardPage() {
         <p className="mt-5 text-center text-xs text-[#8a7580]">
           Pembaruan terakhir:{" "}
           {status?.updated_at
-            ? new Date(status.updated_at).toLocaleString("id-ID")
+            ? `${new Date(status.updated_at).toLocaleString("id-ID")}\u00a0\u00b7 ${relativeTime(status.updated_at, now)}`
             : "Belum ada data"}
         </p>
       </section>
 
       {settingsOpen && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center overflow-y-auto bg-black/30">
-          <div className="modal-enter w-full max-w-[600px] rounded-2xl border border-[#f6d5e1] bg-white p-6 shadow-[0_10px_35px_rgba(236,95,150,.07)]">
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/40 sm:items-center"
+          onClick={(e) => { if (e.target === e.currentTarget) setSettingsOpen(false); }}
+        >
+          <div className="drawer-enter sm:modal-enter w-full rounded-t-3xl border border-[#f6d5e1] bg-white p-6 shadow-[0_-6px_30px_rgba(236,95,150,.12)] sm:max-w-[600px] sm:rounded-2xl sm:shadow-[0_10px_35px_rgba(236,95,150,.07)]">
+            <div className="mb-1 flex justify-center sm:hidden">
+              <div className="h-1 w-10 rounded-full bg-[#f6d5e1]" />
+            </div>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">Pengaturan Batas Kelembapan</h2>
               <button
@@ -629,7 +643,6 @@ export default function DashboardPage() {
                 <X size={18} />
               </button>
             </div>
-
             <div className="grid gap-4">
               <ThresholdForm title="Vegetatif" value={veg} onChange={setVeg} />
               <ThresholdForm title="Generatif" value={gen} onChange={setGen} />
@@ -644,8 +657,23 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {toast && (
+        <div className="toast-float fixed bottom-6 right-4 z-50 flex max-w-[320px] items-center gap-3 rounded-2xl border border-[#f6d5e1] bg-white px-4 py-3 text-sm text-[#3b2a33] shadow-[0_16px_40px_rgba(236,95,150,.18)]">
+          <Activity size={16} className="shrink-0 text-[#ec5f96]" />
+          <span>{toast}</span>
+        </div>
+      )}
     </main>
   );
+}
+
+function relativeTime(isoString: string, now: number): string {
+  const diff = Math.floor((now - new Date(isoString).getTime()) / 1000);
+  if (diff < 5) return "baru saja";
+  if (diff < 60) return `${diff} detik yang lalu`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} menit yang lalu`;
+  return `${Math.floor(diff / 3600)} jam yang lalu`;
 }
 
 function Kpi({
