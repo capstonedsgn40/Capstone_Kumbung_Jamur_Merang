@@ -27,23 +27,37 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#fdfafb] px-5">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#fff9fb] px-5 py-10">
+      <div
+        aria-hidden="true"
+        className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-[#ffe4ee] opacity-70 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute -bottom-32 -right-20 h-80 w-80 rounded-full bg-[#ffeaf2] opacity-80 blur-3xl"
+      />
       <form
         onSubmit={submit}
-        className="w-full max-w-sm rounded-[28px] border border-pink-100 bg-white p-8 shadow-[0_20px_60px_rgba(220,154,174,.14)]"
+        className="relative w-full max-w-md rounded-[32px] border border-[#f6d5e1] bg-white/95 p-7 shadow-[0_24px_70px_rgba(236,95,150,.14)] sm:p-9"
       >
-        <div className="mb-7 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#d99aad] text-white">
-            <Leaf size={26} />
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#ec5f96] text-white shadow-[0_14px_32px_rgba(236,95,150,.22)]">
+            <Leaf size={29} />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ec5f96]">
+            Mushroom House
+          </p>
+          <h1 className="mt-2 text-2xl font-bold text-[#3b2a33] sm:text-[28px]">
             Monitoring Kumbung
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Masuk untuk mengelola mist nozzle
+          <p className="mt-2 text-sm leading-6 text-[#8a7580]">
+            Masuk untuk memantau dan mengelola mist nozzle.
           </p>
         </div>
-        <label className="text-sm font-semibold text-slate-700" htmlFor="email">
+        <label
+          className="text-sm font-bold text-[#3b2a33]"
+          htmlFor="email"
+        >
           Email
         </label>
         <input
@@ -52,11 +66,11 @@ export default function LoginPage() {
           autoComplete="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="mt-2 w-full rounded-xl border border-pink-100 px-4 py-3 outline-none focus:border-[#d99aad] focus:ring-4 focus:ring-pink-100"
+          className="mt-2 w-full rounded-2xl border border-[#f6d5e1] bg-[#fffafb] px-4 py-3.5 text-[#3b2a33] outline-none transition focus:border-[#ec5f96] focus:bg-white focus:ring-4 focus:ring-[#ffe4ee]"
           required
         />
         <label
-          className="mt-4 block text-sm font-semibold text-slate-700"
+          className="mt-5 block text-sm font-bold text-[#3b2a33]"
           htmlFor="password"
         >
           Password
@@ -67,19 +81,19 @@ export default function LoginPage() {
           autoComplete="current-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="mt-2 w-full rounded-xl border border-pink-100 px-4 py-3 outline-none focus:border-[#d99aad] focus:ring-4 focus:ring-pink-100"
+          className="mt-2 w-full rounded-2xl border border-[#f6d5e1] bg-[#fffafb] px-4 py-3.5 text-[#3b2a33] outline-none transition focus:border-[#ec5f96] focus:bg-white focus:ring-4 focus:ring-[#ffe4ee]"
           required
         />
         {error && (
-          <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-[#e5484d]">
             {error}
           </p>
         )}
         <button
           disabled={loading}
-          className="mt-5 w-full rounded-xl bg-[#d99aad] py-3 font-semibold text-white shadow-lg shadow-pink-200 disabled:opacity-60"
+          className="mt-6 min-h-12 w-full rounded-2xl bg-[#ec5f96] px-5 py-3.5 font-bold text-white shadow-[0_12px_28px_rgba(236,95,150,.20)] transition hover:bg-[#df4f89] active:scale-[.99] disabled:opacity-60"
         >
-          {loading ? "Memverifikasi..." : "Masuk"}
+          {loading ? "Memverifikasi..." : "Masuk ke Dashboard"}
         </button>
       </form>
     </main>
