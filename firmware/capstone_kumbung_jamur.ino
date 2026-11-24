@@ -11,8 +11,8 @@ const char* WIFI_SSID = "ISI_SSID_WIFI_ANDA";
 const char* WIFI_PASS = "ISI_PASSWORD_WIFI_ANDA";
 
 const bool USE_TLS = true; 
-const char* MQTT_SERVER = "w7dca772.ala.asia-southeast1.emqxsl.com";
-const int   MQTT_PORT   = 8883; 
+const char* MQTT_SERVER = "mqtts://your_broker_address.emqxsl.com:8883";
+const int   MQTT_PORT   = 8883;
 const char* MQTT_USER   = "ISI_USERNAME_MQTT_ANDA";   
 const char* MQTT_PASS   = "ISI_PASSWORD_MQTT_ANDA";
 
