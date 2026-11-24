@@ -12,7 +12,7 @@ Aplikasi web _real-time_ untuk memantau kondisi suhu dan kelembapan udara pada *
 2. **Otomatisasi Berdasarkan Fase Pertumbuhan**
    - Mendukung dua profil pengaturan kelembapan yang dapat diganti langsung dari dashboard:
      - **Fase Vegetatif (Pertumbuhan Miselium):** Default batas kelembapan **80% – 88%**.
-     - **Fase Generatif (Pembentukan Tubuh Buah):** Default batas kelembapan **90% – 93%**.
+     - **Fase Generatif (Pembentukan Tubuh Buah):** Default batas kelembapan **85% – 93%**.
    - Batas bawah dan batas atas kelembapan pada tiap fase dapat disesuaikan secara fleksibel melalui form pengaturan di dashboard.
 3. **Kontrol Pompa Mode Otomatis & Manual**
    - **Mode AUTO:** Sistem menyalakan pompa secara otomatis ketika kelembapan rata-rata turun di bawah batas bawah fase aktif, dan mematikannya ketika mencapai batas atas.
@@ -89,10 +89,10 @@ Salin file `.env.example` menjadi `.env.local` dan lengkapi nilainya:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_publish_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_secret_key
 
-MQTT_BROKER_URL=mqtts://w7dca772.ala.asia-southeast1.emqxsl.com:8883
+MQTT_BROKER_URL=mqtts://your_broker_address.emqxsl.com:8883
 MQTT_USERNAME=your_emqx_username
 MQTT_PASSWORD=your_emqx_password
 MQTT_TOPIC_PREFIX=kumbung_jamur_capstone_9921

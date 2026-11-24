@@ -60,8 +60,8 @@ type HistoryItem = {
 };
 
 const defaults: Config = {
-  vegetatif: { bawah: 70, atas: 80 },
-  generatif: { bawah: 85, atas: 92 },
+  vegetatif: { bawah: 80, atas: 88 },
+  generatif: { bawah: 85, atas: 93 },
 };
 
 export default function DashboardPage() {
@@ -266,6 +266,7 @@ export default function DashboardPage() {
   }
 
   async function saveConfig() {
+    setSettingsOpen(false);
     await command({ type: "CONFIG", vegetatif: veg, generatif: gen });
   }
 
@@ -282,10 +283,10 @@ export default function DashboardPage() {
                 Sistem Monitoring
               </p>
               <h1 className="truncate text-lg font-bold sm:text-xl">
-                Kumbung Jamur
+                Kumbung Jamur Merang
               </h1>
               <p className="hidden text-xs text-[#8a7580] md:block">
-                Monitoring suhu, kelembapan, dan pengkabutan
+                Capstone Project
               </p>
             </div>
           </div>
@@ -647,6 +648,36 @@ export default function DashboardPage() {
               <ThresholdForm title="Vegetatif" value={veg} onChange={setVeg} />
               <ThresholdForm title="Generatif" value={gen} onChange={setGen} />
             </div>
+            {(() => {
+              const orig = status?.config;
+              const diffs: { label: string; from: number; to: number }[] = [];
+              if (orig) {
+                if (veg.bawah !== orig.vegetatif.bawah)
+                  diffs.push({ label: "Vegetatif batas bawah", from: orig.vegetatif.bawah, to: veg.bawah });
+                if (veg.atas !== orig.vegetatif.atas)
+                  diffs.push({ label: "Vegetatif batas atas", from: orig.vegetatif.atas, to: veg.atas });
+                if (gen.bawah !== orig.generatif.bawah)
+                  diffs.push({ label: "Generatif batas bawah", from: orig.generatif.bawah, to: gen.bawah });
+                if (gen.atas !== orig.generatif.atas)
+                  diffs.push({ label: "Generatif batas atas", from: orig.generatif.atas, to: gen.atas });
+              }
+              if (diffs.length === 0) return null;
+              return (
+                <div className="mt-3 rounded-2xl border border-[#f6d5e1] bg-[#fff9fb] px-4 py-3">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#8a7580]">Perubahan yang akan disimpan</p>
+                  <ul className="space-y-1">
+                    {diffs.map((d) => (
+                      <li key={d.label} className="flex items-center gap-2 text-sm">
+                        <span className="text-[#8a7580]">{d.label}:</span>
+                        <span className="font-bold tabular-nums text-[#9ca3af] line-through">{d.from}%</span>
+                        <span className="text-[#8a7580]">&#8594;</span>
+                        <span className="font-bold tabular-nums text-[#ec5f96]">{d.to}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
             <button
               disabled={!online || busy}
               onClick={saveConfig}
@@ -718,6 +749,38 @@ function ThresholdForm({
   value: { bawah: number; atas: number };
   onChange: (value: { bawah: number; atas: number }) => void;
 }) {
+  const [bawahStr, setBawahStr] = useState(String(value.bawah));
+  const [atasStr, setAtasStr] = useState(String(value.atas));
+
+  // Sync string state when parent resets the value (e.g. modal reopen)
+  useEffect(() => {
+    setBawahStr(String(value.bawah));
+  }, [value.bawah]);
+
+  useEffect(() => {
+    setAtasStr(String(value.atas));
+  }, [value.atas]);
+
+  const handleBawah = (raw: string) => {
+    // Allow empty string and partial input like "" or "8" while typing
+    if (raw === "" || /^\d{1,3}$/.test(raw)) {
+      setBawahStr(raw);
+      const n = parseInt(raw, 10);
+      if (!isNaN(n) && n >= 0 && n <= 100) onChange({ ...value, bawah: n });
+    }
+  };
+
+  const handleAtas = (raw: string) => {
+    if (raw === "" || /^\d{1,3}$/.test(raw)) {
+      setAtasStr(raw);
+      const n = parseInt(raw, 10);
+      if (!isNaN(n) && n >= 0 && n <= 100) onChange({ ...value, atas: n });
+    }
+  };
+
+  const inputClass =
+    "mt-2 w-full rounded-xl border border-[#f6d5e1] bg-[#fffafb] px-3 py-3 tabular-nums text-[#3b2a33] outline-none transition focus:border-[#ec5f96] focus:ring-4 focus:ring-[#ffe4ee]";
+
   return (
     <article className="rounded-3xl border border-[#f6d5e1] bg-white p-5 shadow-[0_10px_35px_rgba(236,95,150,.06)]">
       <h3 className="font-bold">Fase {title}</h3>
@@ -725,27 +788,30 @@ function ThresholdForm({
         <label className="text-sm font-semibold text-[#8a7580]">
           Batas Bawah
           <input
-            type="number"
-            min="0"
-            max="100"
-            value={value.bawah}
-            onChange={(event) =>
-              onChange({ ...value, bawah: Number(event.target.value) })
-            }
-            className="mt-2 w-full rounded-xl border border-[#f6d5e1] bg-[#fffafb] px-3 py-3 tabular-nums text-[#3b2a33] outline-none transition focus:border-[#ec5f96] focus:ring-4 focus:ring-[#ffe4ee]"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={bawahStr}
+            onChange={(e) => handleBawah(e.target.value)}
+            onBlur={() => {
+              // Snap to last valid value on blur if field is empty
+              if (bawahStr === "") setBawahStr(String(value.bawah));
+            }}
+            className={inputClass}
           />
         </label>
         <label className="text-sm font-semibold text-[#8a7580]">
           Batas Atas
           <input
-            type="number"
-            min="0"
-            max="100"
-            value={value.atas}
-            onChange={(event) =>
-              onChange({ ...value, atas: Number(event.target.value) })
-            }
-            className="mt-2 w-full rounded-xl border border-[#f6d5e1] bg-[#fffafb] px-3 py-3 tabular-nums text-[#3b2a33] outline-none transition focus:border-[#ec5f96] focus:ring-4 focus:ring-[#ffe4ee]"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={atasStr}
+            onChange={(e) => handleAtas(e.target.value)}
+            onBlur={() => {
+              if (atasStr === "") setAtasStr(String(value.atas));
+            }}
+            className={inputClass}
           />
         </label>
       </div>

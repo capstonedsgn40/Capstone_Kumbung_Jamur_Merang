@@ -45,13 +45,13 @@ export default function LoginPage() {
             <Leaf size={29} />
           </div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ec5f96]">
-            Mushroom House
+            Capstone Project
           </p>
           <h1 className="mt-2 text-2xl font-bold text-[#3b2a33] sm:text-[28px]">
             Monitoring Kumbung
           </h1>
           <p className="mt-2 text-sm leading-6 text-[#8a7580]">
-            Masuk untuk memantau dan mengelola mist nozzle.
+            Gunakan akun yang telah terdaftar untuk masuk ke dashboard monitoring Kumbung Jamur Merang.
           </p>
         </div>
         <label
